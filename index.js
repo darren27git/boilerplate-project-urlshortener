@@ -4,11 +4,12 @@ const cors = require('cors');
 const app = express();
 const bodyParser = require('body-parser');
 const dns = require('dns');
+const url = require('url');
 
 // Basic Configuration
 const port = process.env.PORT || 3000;
 const urlDataBase = {};
-let num = 1;
+let num = 0;
 
 app.use(cors());
 
@@ -28,16 +29,51 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 app.post('/api/shorturl', (req, res) => {
   const inputUrl = req.body.url;
-  dns.lookup(inputUrl, (err,address) => {
-    if(err){
+  //const parsedUrl = url.parse(inputUrl);
+  try{
+    const website = new URL(inputUrl);
+    const hostname = website.hostname;
+    dns.lookup(hostname, (err,address) => {
+      if(err){
+        res.json({error: 'invalid url'});
+      }
+      else{
+        if(urlDataBase[inputUrl]){
+          res.json({original_url: req.body.url, shorturl: urlDataBase[inputUrl]});
+        }
+        else{
+          num++;
+          urlDataBase[inputUrl] = num;
+          res.json({original_url: req.body.url, shorturl: num});
+        }
+      }
+    });
+
+  } catch (error){
+    if(error instanceof TypeError){
       res.json({error: 'invalid url'});
     }
-    else{
-      res.send({original_url: req.body.url, shorturl: "test"});
-    }
-  });
+  }
+});
 
-  //res.send({original_url: req.body.url, shorturl: "test"});
+
+
+app.get('/api/shorturl/:num', (req,res) => {
+  const shortValue = parseInt(req.params.num);
+  let originalUrl = null;
+  for(const url in urlDataBase){
+    if(urlDataBase[url] === shortValue){
+      originalUrl = url;
+      break;
+    }
+  }
+  if(originalUrl){
+    console.log(urlDataBase);
+    console.log(originalUrl);
+    const validUrl = new URL(originalUrl);
+    res.redirect(validUrl);
+  }
+
 });
 
 app.listen(port, function() {
