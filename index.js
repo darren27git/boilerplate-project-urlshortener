@@ -68,10 +68,11 @@ app.get('/api/shorturl/:num', (req,res) => {
     }
   }
   if(originalUrl){
-    console.log(urlDataBase);
     console.log(originalUrl);
-    const validUrl = new URL(originalUrl);
-    res.redirect(validUrl);
+    res.redirect(originalUrl);
+  }
+  else{
+    res.json({err: "Not found"});
   }
 
 });
