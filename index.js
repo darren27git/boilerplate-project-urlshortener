@@ -4,12 +4,22 @@ const cors = require('cors');
 const app = express();
 const bodyParser = require('body-parser');
 const dns = require('dns');
-const url = require('url');
+const mongoose = require('mongoose');
+const res = require('express/lib/response');
 
 // Basic Configuration
 const port = process.env.PORT || 3000;
-const urlDataBase = {};
-let num = 0;
+const mongoUri = process.env.MONGO_URI;
+
+
+mongoose.connect(mongoUri);
+
+const urlSchema = new mongoose.Schema({
+  original_url: { type: String, required: true },
+  short_url: { type: Number, required: true },
+});
+
+const Url = mongoose.model('Url', urlSchema);
 
 app.use(cors());
 
@@ -29,22 +39,25 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 app.post('/api/shorturl', (req, res) => {
   const inputUrl = req.body.url;
-  //const parsedUrl = url.parse(inputUrl);
+
   try{
     const website = new URL(inputUrl);
     const hostname = website.hostname;
-    dns.lookup(hostname, (err,address) => {
+    dns.lookup(hostname, async (err,address) => {
       if(err){
         res.json({error: 'invalid url'});
       }
       else{
-        if(urlDataBase[inputUrl]){
-          res.json({original_url: req.body.url, shorturl: urlDataBase[inputUrl]});
+        const existUrl = await Url.findOne({ original_url: inputUrl });
+        if(existUrl){
+          res.json({original_url: existUrl.original_url, shorturl: existUrl.short_url});
         }
         else{
-          num++;
-          urlDataBase[inputUrl] = num;
-          res.json({original_url: req.body.url, shorturl: num});
+          const count = await Url.countDocuments();
+          const shortUrl = count + 1;
+          const newUrl = new Url({ original_url: inputUrl, short_url: shortUrl });
+          await newUrl.save();
+          res.json({ original_url: inputUrl, short_url: shortUrl });
         }
       }
     });
@@ -56,25 +69,20 @@ app.post('/api/shorturl', (req, res) => {
   }
 });
 
+app.get('/api/shorturl/:short_url', async (req, res) => {
+  const shortNum = parseInt(req.params.short_url);
 
+  try {
+    const urlData = await Url.findOne({ short_url: shortNum });
 
-app.get('/api/shorturl/:num', (req,res) => {
-  const shortValue = parseInt(req.params.num);
-  let originalUrl = null;
-  for(const url in urlDataBase){
-    if(urlDataBase[url] === shortValue){
-      originalUrl = url;
-      break;
+    if (urlData) {
+      res.redirect(urlData.original_url);
+    } else {
+      res.json({ error: 'Short URL not found' });
     }
+  } catch (err) {
+    res.json({ error: 'Failed' });
   }
-  if(originalUrl){
-    console.log(originalUrl);
-    res.redirect(originalUrl);
-  }
-  else{
-    res.json({err: "Not found"});
-  }
-
 });
 
 app.listen(port, function() {
